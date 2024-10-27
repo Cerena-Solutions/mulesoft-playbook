@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ftp="http://www.mulesoft.org/schema/mule/ftp" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:crypto="http://www.mulesoft.org/schema/mule/crypto" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/crypto http://www.mulesoft.org/schema/mule/crypto/current/mule-crypto.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/ftp http://www.mulesoft.org/schema/mule/ftp/current/mule-ftp.xsd">
+	<http:listener-config name="http-listener-config" doc:name="HTTP Listener config" doc:id="fa1f73ee-1d0d-4386-bbba-a994643d1c1e" >
+		<http:listener-connection host="0.0.0.0" port="8081" />
+	</http:listener-config>
+	<crypto:pgp-config name="crypto-pgp-encrypt" doc:name="Crypto Pgp" doc:id="dc2e9962-5f4e-4757-9ffe-9441c5a11ab0" publicKeyring="public-key.asc">
+		<crypto:pgp-key-infos >
+			<crypto:pgp-asymmetric-key-info keyId="public-key" fingerprint="995AE89A5A0DB51931631B6DECD4ACD34487A3C8"/>
+		</crypto:pgp-key-infos>
+	</crypto:pgp-config>
+	<crypto:pgp-config name="crypto-pgp-decrypt" doc:name="Crypto Pgp" doc:id="dd1838dc-be46-4102-ab5a-39c1e6732cac" privateKeyring="private-key.asc">
+		<crypto:pgp-key-infos >
+			<crypto:pgp-asymmetric-key-info keyId="private-key" passphrase="MuleSoftCerenaSolutions" fingerprint="995AE89A5A0DB51931631B6DECD4ACD34487A3C8"/>
+		</crypto:pgp-key-infos>
+	</crypto:pgp-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="adb81b17-0c2c-48b8-82eb-c3cafcb9b0dc" file="config.yaml" />
+	<flow name="mule-pgp-encrypt-flow" doc:id="60af6862-70c0-4338-ac9e-f3cf1dc16a0e">
+		<http:listener doc:name="/encrypt" doc:id="30d6be8f-9b76-4f88-bf94-d2cc85837dd9" config-ref="http-listener-config" path="/encrypt" />
+		<file:read doc:name="Read .txt file" doc:id="fc00064d-2136-4d90-b93d-930a8d6e1445" path="${file.directory}/sample-file.txt" />
+		<crypto:pgp-encrypt doc:name="Pgp encrypt" doc:id="8e9e6ba7-bd31-4736-b3b2-c8c77d3dc5e2" config-ref="crypto-pgp-encrypt" keyId="public-key" />
+		<file:write doc:name="Write encrypted file" doc:id="c715b972-9afd-4a38-8456-6172e60a7e07" path="${file.directory}/sample-file-encrypted.gpg" />
+		<ee:transform doc:name="Transform JSON payload" doc:id="523aa8af-f1cb-4e01-bb04-acba7a86242b">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "File encrypted successfully!",
+	"content": payload default {}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+	<flow name="mule-pgp-decrypt-flow" doc:id="f5577394-76d8-4940-8438-e569f85fdc78">
+		<http:listener doc:name="/decrypt" doc:id="4f18b6cf-ae50-4da6-b4f9-94b185ccaf34" config-ref="http-listener-config" path="/decrypt" />
+		<file:read doc:name="Read .gpg file" doc:id="68e6aff8-5514-4667-824b-a8839c065854" path="${file.directory}/sample-file-encrypted.gpg" />
+		<crypto:pgp-decrypt doc:name="Pgp decrypt" doc:id="58ffe1ce-c65b-44d9-9134-220ea1067b04" config-ref="crypto-pgp-decrypt" />
+		<file:write doc:name="Write decrypted file" doc:id="3119c083-3121-4791-b2db-3609604101a9" path="${file.directory}/sample-file-decrypted.txt" />
+		<ee:transform doc:name="Transform JSON payload" doc:id="a0dd3934-d16b-442a-b83a-7a27a06c216d">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "File decrypted successfully!",
+	"content": payload default {}
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+	</flow>
+</mule>
