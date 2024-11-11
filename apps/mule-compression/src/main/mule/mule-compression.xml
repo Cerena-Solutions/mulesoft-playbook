@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:file="http://www.mulesoft.org/schema/mule/file"
+      xmlns:compression="http://www.mulesoft.org/schema/mule/compression"
+      xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+      xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+      http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+      http://www.mulesoft.org/schema/mule/compression http://www.mulesoft.org/schema/mule/compression/current/mule-compression.xsd
+      http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd
+      http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+    <http:listener-config name="http-listener-config" doc:name="HTTP Listener config" doc:id="deb00ba4-9929-4e30-b7e7-9590c0fe4433">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+
+    <configuration-properties doc:name="Configuration properties" doc:id="f359c52f-bef4-4ee7-95d4-e29974065efe" file="config.yaml" />
+	<flow name="mule-compression-archive-flow" doc:id="e437e477-84f4-40cd-9f83-bff9bb3772d9" doc:description="Cerena Solutions">
+        <http:listener doc:name="/archive" doc:id="d214c82c-e91f-4d1a-b244-48d3a8ff7e7e" config-ref="http-listener-config" path="/archive">
+            <http:response>
+                <http:headers><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
+            </http:response>
+            <http:error-response>
+                <http:headers><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
+            </http:error-response>
+        </http:listener>
+
+        <!-- Read files that need to be included in the ZIP -->
+
+        <!-- Additional files to add -->
+
+        <!-- Compress the files into a ZIP archive -->
+        <ee:transform doc:name="Read sample-file.txt" doc:id="d3db3a07-2042-4679-9914-cd4f89c75afc" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/plain
+---
+readUrl("classpath://sample-file.txt", "text/plain")]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<compression:archive doc:name="Archive" doc:id="83d7febc-58f7-4041-a768-765900d99000">
+            <compression:entries><![CDATA[#[{
+	"files/sample-file.txt": payload, // data read from actual file
+	"files/new-file.txt": "Cerena Solutions" // hardcoded data 
+}]]]>
+            </compression:entries>
+            <compression:archiver>
+                <compression:zip-archiver/>
+            </compression:archiver>
+        </compression:archive>
+
+        <!-- Set Response Headers (Content-Disposition for download and Content-Type for ZIP) -->
+        <ee:transform doc:name="Set outboundHeaders" doc:id="85316274-08b7-4905-b9f6-8d7e13600d77">
+            <ee:variables>
+                <ee:set-variable variableName="outboundHeaders"><![CDATA[{
+	"Content-Disposition": "attachment; filename=\"my-archive.zip\"",
+	"Content-Type": "application/zip"
+}                    ]]>
+                </ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+
+        <!-- Log the output (Optional) -->
+
+       
+    </flow>
+	<flow name="mule-compression-extract-flow" doc:id="a072f4fe-ad6c-4e1f-a24a-f4308ab3d5bc" >
+		<http:listener doc:name="/extract" doc:id="d9d6da02-4752-4dc1-acb2-6f8e3e7e8cef" config-ref="http-listener-config" path="/extract" >
+			<http:response >
+				<http:headers ><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
+			</http:response>
+			<http:error-response >
+				<http:headers ><![CDATA[#[vars.outboundHeaders default {}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<file:read doc:name="Read my-archive.zip" doc:id="f9ad5276-22e9-4b1a-bd19-0fa7cf89fd91" path="${file.directory}/my-archive.zip"/>
+		<compression:extract doc:name="Extract" doc:id="c5dae472-66e5-4241-b507-9ed090e95251" >
+			<compression:extractor >
+				<compression:zip-extractor />
+			</compression:extractor>
+		</compression:extract>
+		<ee:transform doc:name="Transform extracted files" doc:id="b338fb54-52bb-42fa-a41b-5005e0f45f20" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload pluck {
+    fileName: $$,
+    content: $
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<foreach doc:name="For Each file" doc:id="a00bea7c-3f3a-47ea-8d05-ad62e4369b72" collection="#[payload]">
+			<file:write doc:name="Write &lt;fileName&gt;" doc:id="55eca176-64c5-4c2e-b993-bfdd8bcd064d" path="#[p('file.directory') ++ &quot;/$(payload.fileName)&quot;]">
+				<file:content ><![CDATA[#[output text/plain
+---
+payload.content]]]></file:content>
+			</file:write>
+		</foreach>
+	</flow>
+</mule>
